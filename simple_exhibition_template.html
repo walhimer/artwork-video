@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exhibition Template</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: sans-serif; background: #000; color: #fff; overflow: hidden; }
+        
+        #control-panel {
+            position: fixed; top: 0; left: 0; right: 0;
+            background: #1a1a1a; padding: 20px; z-index: 1000;
+            border-bottom: 2px solid #444; transition: transform 0.3s;
+        }
+        #control-panel.hidden { transform: translateY(-100%); }
+        
+        #show-panel {
+            position: fixed; top: 10px; left: 10px; z-index: 1001;
+            background: #4a9eff; color: #fff; border: none; border-radius: 4px;
+            padding: 10px 14px; font-weight: 600; cursor: pointer;
+            display: none;
+        }
+        #show-panel.visible { display: inline-block; }
+        
+        .controls {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px; margin-bottom: 15px;
+        }
+        .control-group { display: flex; flex-direction: column; gap: 5px; }
+        label { font-size: 12px; color: #999; }
+        input { padding: 8px; background: #222; border: 1px solid #444; border-radius: 4px; color: #fff; }
+        button { padding: 12px 24px; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; background: #4a9eff; color: #fff; }
+        button:hover { background: #357abd; }
+        
+        #canvas-container {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            display: flex; justify-content: center; align-items: center; background: #000;
+        }
+        canvas { max-width: 100%; max-height: 100%; width: auto !important; height: auto !important; }
+    </style>
+</head>
+<body>
+    <div id="control-panel">
+        <h3 style="margin-bottom: 15px; color: #4a9eff;">Exhibition - 2160×3840 @ 60fps</h3>
+        <div class="controls">
+            <div class="control-group">
+                <label>Title</label>
+                <input type="text" id="title" value="912 (traveling_landscape)">
+            </div>
+            <div class="control-group">
+                <label>Credit</label>
+                <input type="text" id="credit" value="Mark Walhimer, 2026">
+            </div>
+            <div class="control-group">
+                <label>Duration (seconds)</label>
+                <input type="number" id="duration" value="120">
+            </div>
+            <div class="control-group">
+                <label>QR URL (optional)</label>
+                <input type="text" id="qr-url" placeholder="https://...">
+            </div>
+        </div>
+        <button onclick="start()">START</button>
+        <button onclick="togglePanel()" style="background: #555; margin-left: 10px;">HIDE PANEL</button>
+        <div id="qr-preview" style="margin-top: 10px;"></div>
+    </div>
+    <button id="show-panel" onclick="togglePanel()">SHOW CONTROLS</button>
+    <div id="canvas-container"></div>
+    
+    <script>
+    const W = 2160, H = 3840, FPS = 60;
+    const TITLE_DUR = 6, TITLE_FADE_IN = 1.2, TITLE_FADE_OUT = 1.2;
+    const BLACK_BEAT = 0.6;
+    const END_DUR = 6, END_FADE_IN = 1.2, END_FADE_OUT = 1.2;
+    const ART_FADE_IN = 0.75, ART_FADE_OUT = 0.75;
+    const FONT_SIZE = 90, QR_SIZE = 280, QR_PAD = 120;
+    
+    let artDur, title, credit, qrImg, overlay, totalFrames, loopSec, artSec;
+    
+    function togglePanel() {
+        const panel = document.getElementById('control-panel');
+        const showButton = document.getElementById('show-panel');
+        panel.classList.toggle('hidden');
+        showButton.classList.toggle('visible', panel.classList.contains('hidden'));
+    }
+    
+    function start() {
+        title = document.getElementById('title').value;
+        credit = document.getElementById('credit').value;
+        artDur = parseFloat(document.getElementById('duration').value);
+        
+        const url = document.getElementById('qr-url').value.trim();
+        if (url) {
+            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(url)}`;
+            loadImage(qrUrl, img => {
+                qrImg = img;
+                document.getElementById('qr-preview').innerHTML = 
+                    `<img src="${qrUrl}" style="max-width: 100px; border: 2px solid #4a9eff;"><div style="color: #4a9eff;">✓ QR Ready</div>`;
+            });
+        }
+        
+        const artHold = Math.max(0, artDur - ART_FADE_IN - ART_FADE_OUT);
+        artSec = ART_FADE_IN + artHold + ART_FADE_OUT;
+        loopSec = TITLE_DUR + BLACK_BEAT + artSec + END_DUR;
+        totalFrames = Math.floor(FPS * loopSec);
+        
+        console.log('Started:', title, '- Duration:', loopSec.toFixed(1), 's');
+        if (typeof loop === 'function') loop();
+    }
+    
+    function setup() {
+        let c = createCanvas(W, H, WEBGL);
+        c.parent('canvas-container');
+        frameRate(FPS);
+        pixelDensity(1);
+        colorMode(HSB, 360, 100, 100, 255);
+        noStroke();
+        
+        overlay = createGraphics(W, H);
+        overlay.pixelDensity(1);
+        overlay.colorMode(HSB, 360, 100, 100, 255);
+        overlay.textAlign(CENTER, CENTER);
+        overlay.textFont("sans-serif");
+        overlay.noStroke();
+        
+        noLoop();
+        console.log('Ready - click START');
+    }
+    
+    function draw() {
+        if (!totalFrames) return;
+        
+        const f = (frameCount - 1) % totalFrames;
+        const t = f / FPS;
+        
+        background(0);
+        overlay.clear();
+        
+        // Title
+        if (t < TITLE_DUR) {
+            const a = getAlpha(t, 0, TITLE_DUR, TITLE_FADE_IN, TITLE_FADE_OUT);
+            if (a > 0.001) drawText(title, a, qrImg != null);
+        }
+        // Artwork
+        else if (t >= TITLE_DUR + BLACK_BEAT && t < TITLE_DUR + BLACK_BEAT + artSec) {
+            const artT = t - TITLE_DUR - BLACK_BEAT;
+            const prog = artT / artSec;
+            const a = getAlpha(artT, 0, artSec, ART_FADE_IN, ART_FADE_OUT);
+            
+            if (a > 0.001 && typeof renderArtwork === 'function') {
+                renderArtwork(prog, t, f);
+                if (a < 1) {
+                    push();
+                    translate(-W/2, -H/2, 10);
+                    noStroke();
+                    fill(0, 0, 0, 255 * (1 - a));
+                    rect(0, 0, W, H);
+                    pop();
+                }
+            }
+        }
+        // End
+        else if (t >= TITLE_DUR + BLACK_BEAT + artSec) {
+            const endT = t - TITLE_DUR - BLACK_BEAT - artSec;
+            const a = getAlpha(endT, 0, END_DUR, END_FADE_IN, END_FADE_OUT);
+            if (a > 0.001) drawText(credit, a, qrImg != null);
+        }
+        
+        // Composite
+        push();
+        resetMatrix();
+        imageMode(CORNER);
+        translate(-W/2, -H/2, 1);
+        image(overlay, 0, 0, W, H);
+        pop();
+    }
+    
+    function drawText(txt, alpha, showQR) {
+        overlay.noStroke();
+        overlay.fill(0, 0, 0, 255 * alpha);
+        overlay.rect(0, 0, W, H);
+        overlay.fill(0, 0, 100, 255 * alpha);
+        overlay.textSize(FONT_SIZE);
+        overlay.text(txt, W/2, H/2);
+        
+        if (showQR && qrImg) {
+            overlay.push();
+            overlay.tint(255, 255 * alpha);
+            overlay.image(qrImg, W - QR_SIZE - QR_PAD, H - QR_SIZE - QR_PAD, QR_SIZE, QR_SIZE);
+            overlay.pop();
+        }
+    }
+    
+    function getAlpha(t, start, dur, fadeIn, fadeOut) {
+        if (t < start || t >= start + dur) return 0;
+        const local = t - start;
+        const aIn = smoothstep(0, fadeIn, local);
+        const aOut = 1 - smoothstep(dur - fadeOut, dur, local);
+        return aIn * aOut;
+    }
+    
+    function smoothstep(e0, e1, x) {
+        if (e0 === e1) return x < e0 ? 0 : 1;
+        const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));
+        return t * t * (3 - 2 * t);
+    }
+    
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'c' || event.key === 'C' || event.key === 'h' || event.key === 'H') {
+            togglePanel();
+        }
+    });
+    </script>
+    <script src="artwork_912_compatible.js"></script>
+</body>
+</html>
