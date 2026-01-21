@@ -1,6 +1,7 @@
 ## Artwork 912 Exhibition Template
 
 This project runs a fullscreen 2160×3840 (vertical) p5.js exhibition loop with a title slide, artwork section, and end credit slide. It includes an optional QR code and simple controls panel.
+- https://walhimer.github.io/artwork-video/
 
 ### Run Locally (recommended for recording)
 1. Open `simple_exhibition_template.html` in a browser.
